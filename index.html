@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>食堂采购预算维护 - iMedical-CLMS 医院后勤管理系统</title>
+  <!-- Vue3 + Element Plus（本地库，离线可用；如需 CDN 可改回 jsdelivr） -->
+  <link rel="stylesheet" href="./lib/element-plus.css" />
+  <script src="./lib/vue.global.prod.js"></script>
+  <script src="./lib/element-plus.full.min.js"></script>
+  <script src="./lib/zh-cn.min.js"></script>
+  <script src="./lib/icons-vue.iife.min.js"></script>
+  <style>
+    [v-cloak] { display: none; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #f0f2f5;
+      font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      color: #303133;
+      font-size: 14px;
+    }
+    .app-header {
+      height: 56px;
+      background: linear-gradient(90deg, #1f4e8c 0%, #2f6fb3 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
+    }
+    .app-header .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+    .app-header .logo .icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      background: #fff;
+      color: #1f4e8c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+    .app-header .sub {
+      margin-left: 16px;
+      font-size: 13px;
+      opacity: .85;
+    }
+    .app-header .header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+
+    .page-container { padding: 16px 24px 24px; max-width: 1500px; margin: 0 auto; }
+
+    .breadcrumb { margin-bottom: 8px; color: #909399; font-size: 13px; }
+    .breadcrumb .active { color: #303133; }
+
+    .card {
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #303133;
+      margin-bottom: 14px;
+      padding-left: 10px;
+      border-left: 3px solid #2f6fb3;
+      line-height: 1;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .role-switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .role-label { color: #606266; }
+
+    .query-form .el-form-item { margin-bottom: 0; }
+
+    .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+
+    /* 修复表头分行错位：表头单元格强制单行显示，禁止换行 */
+    .el-table th.el-table__cell .cell {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .amount-cell { font-variant-numeric: tabular-nums; font-weight: 600; color: #1f4e8c; }
+    .remark-text { color: #606266; }
+    .muted { color: #909399; }
+
+    .change-dialog-header { margin-bottom: 14px; padding: 10px 12px; background: #f7f9fc; border-radius: 4px; font-size: 13px; color: #606266; }
+    .change-dialog-header b { color: #303133; }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <!-- 顶部系统头 -->
+    <div class="app-header">
+      <div class="logo">
+        <span class="icon">i</span>
+        <span>iMedical-CLMS 医院后勤管理系统</span>
+      </div>
+      <span class="sub">食堂后勤库存 · 采购预算</span>
+      <div class="header-right">
+        <span style="font-size:13px;">当前用户：{{ currentUserName }}（{{ roleLabel }}）</span>
+      </div>
+    </div>
+
+    <div class="page-container">
+      <!-- 面包屑 -->
+      <div class="breadcrumb">
+        <span>后勤管理</span>
+        <span style="margin:0 6px;">/</span>
+        <span>食堂采购管理</span>
+        <span style="margin:0 6px;">/</span>
+        <span class="active">食堂采购预算维护</span>
+      </div>
+
+      <!-- 区域1：查询筛选区 -->
+      <div class="card">
+        <el-form :model="query" inline class="query-form">
+          <el-form-item label="院区">
+            <el-select v-model="query.campus" placeholder="全部" clearable style="width: 180px;">
+              <el-option label="全部" value="" />
+              <el-option label="中心院区" value="中心院区" />
+              <el-option label="大兴院区" value="大兴院区" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="预算年度">
+            <el-select v-model="query.year" placeholder="全部" clearable filterable style="width: 180px;">
+              <el-option v-for="y in yearOptions" :key="y" :label="y + ' 年'" :value="y" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :icon="'Search'" @click="handleSearch">查询</el-button>
+            <el-button :icon="'RefreshLeft'" @click="handleReset">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <!-- 区域2+3：操作按钮区 & 数据表格 -->
+      <div class="card">
+        <div class="toolbar">
+          <!-- 模拟权限开关 -->
+          <div class="role-switch">
+            <span class="role-label">模拟权限：</span>
+            <el-radio-group v-model="role" size="small">
+              <el-radio-button label="admin">后勤管理员</el-radio-button>
+              <el-radio-button label="storekeeper">库管员</el-radio-button>
+            </el-radio-group>
+            <el-tag v-if="!isAdmin" type="warning" size="small" effect="plain">只读模式</el-tag>
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <el-button v-if="isAdmin" type="primary" :icon="'Plus'" @click="openAdd">新增预算</el-button>
+        </div>
+
+        <el-table :data="pagedList" border stripe v-loading="false" highlight-current-row>
+          <el-table-column type="index" label="序号" width="60" align="center" :index="indexMethod"></el-table-column>
+          <el-table-column prop="campus" label="院区" min-width="110" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.campus === '中心院区' ? 'primary' : 'success'" effect="light">{{ row.campus }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="year" label="预算年度" min-width="95" align="center">
+            <template #default="{ row }">{{ row.year }} 年</template>
+          </el-table-column>
+          <el-table-column label="年度采购预算金额(元)" min-width="170" align="right">
+            <template #default="{ row }">
+              <span class="amount-cell">{{ fmtAmount(row.amount) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-if="row.remark" class="remark-text">{{ row.remark }}</span>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="creator" label="创建人" min-width="90" align="center"></el-table-column>
+          <el-table-column prop="createdAt" label="创建时间" min-width="160" align="center"></el-table-column>
+          <el-table-column prop="modifier" label="修改人" min-width="90" align="center">
+            <template #default="{ row }">
+              <span v-if="row.modifier">{{ row.modifier }}</span>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="modifiedAt" label="修改时间" min-width="160" align="center">
+            <template #default="{ row }">
+              <span v-if="row.modifiedAt">{{ row.modifiedAt }}</span>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="170" align="center" fixed="right">
+            <template #default="{ row }">
+              <el-button v-if="isAdmin" link type="primary" size="small" :icon="'Edit'" @click="openEdit(row)">编辑</el-button>
+              <el-button link type="warning" size="small" :icon="'Clock'" @click="openHistory(row)">变更记录</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="pagination">
+          <el-pagination
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            :total="total"
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :page-sizes="[5, 10, 20, 50]"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- 弹窗1：新增/编辑预算 -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      width="520px"
+      :close-on-click-modal="false"
+      @closed="handleDialogClosed"
+    >
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="150px">
+        <el-form-item label="院区" prop="campus">
+          <el-select v-model="form.campus" placeholder="请选择院区" style="width:100%;">
+            <el-option label="中心院区" value="中心院区" />
+            <el-option label="大兴院区" value="大兴院区" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="预算年度" prop="year">
+          <el-select v-model="form.year" placeholder="请选择预算年度" style="width:100%;">
+            <el-option v-for="y in yearOptions" :key="y" :label="y + ' 年'" :value="y" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="年度采购预算金额(元)" prop="amount">
+          <el-input v-model="form.amount" placeholder="请输入金额，最多2位小数" clearable>
+            <template #append>元</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="备注" prop="remark">
+          <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="选填，最多200字" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">确定保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 弹窗2：预算变更记录 -->
+    <el-dialog v-model="historyVisible" title="预算变更记录" width="920px" :close-on-click-modal="false">
+      <div class="change-dialog-header" v-if="historyCurrent">
+        当前记录：<b>{{ historyCurrent.campus }} · {{ historyCurrent.year }} 年</b>　当前预算金额：<b class="amount-cell">{{ fmtAmount(historyCurrent.amount) }}</b> 元　累计变更 <b>{{ historyCurrent.history.length }}</b> 次
+      </div>
+      <el-table :data="historyCurrent ? historyCurrent.history : []" border size="small">
+        <el-table-column prop="time" label="变更时间" min-width="150" align="center"></el-table-column>
+        <el-table-column prop="operator" label="操作人" min-width="90" align="center"></el-table-column>
+        <el-table-column label="修改前预算金额(元)" min-width="150" align="right">
+          <template #default="{ row }">{{ fmtAmount(row.beforeAmount) }}</template>
+        </el-table-column>
+        <el-table-column label="修改后预算金额(元)" min-width="150" align="right">
+          <template #default="{ row }">
+            <span class="amount-cell">{{ fmtAmount(row.afterAmount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="修改前备注" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.beforeRemark">{{ row.beforeRemark }}</span>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="修改后备注" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.afterRemark">{{ row.afterRemark }}</span>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="note" label="变更说明" min-width="180" show-overflow-tooltip></el-table-column>
+      </el-table>
+      <el-empty v-if="historyCurrent && historyCurrent.history.length === 0" description="暂无变更记录" :image-size="80"></el-empty>
+      <template #footer>
+        <el-button type="primary" @click="historyVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+  </div>
+
+  <script>
+    const { createApp, ref, reactive, computed, nextTick } = Vue;
+    const { ElMessage } = ElementPlus;
+
+    const YEAR_OPTIONS = [2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030];
+
+    // 模拟数据
+    const INITIAL_DATA = [
+      {
+        id: 8, campus: '大兴院区', year: 2026, amount: 4200000, remark: '2026年度采购预算',
+        creator: '张三', createdAt: '2025-12-02 10:20:00', modifier: '', modifiedAt: '', history: []
+      },
+      {
+        id: 7, campus: '大兴院区', year: 2025, amount: 3800000, remark: '',
+        creator: '张三', createdAt: '2024-12-05 09:10:00', modifier: '李四', modifiedAt: '2025-08-11 15:30:00', history: []
+      },
+      {
+        id: 6, campus: '大兴院区', year: 2024, amount: 3200000, remark: '新增冷链设备采购',
+        creator: '张三', createdAt: '2023-12-08 14:00:00', modifier: '王伟', modifiedAt: '2024-06-20 16:40:00',
+        history: [
+          {
+            time: '2024-06-20 16:40:00', operator: '王伟',
+            beforeAmount: 3000000, afterAmount: 3200000,
+            beforeRemark: '', afterRemark: '新增冷链设备采购',
+            note: '新增冷链设备采购预算，预算金额上调'
+          }
+        ]
+      },
+      {
+        id: 5, campus: '大兴院区', year: 2023, amount: 2800000, remark: '',
+        creator: '张三', createdAt: '2022-12-01 11:00:00', modifier: '', modifiedAt: '', history: []
+      },
+      {
+        id: 4, campus: '中心院区', year: 2026, amount: 6000000, remark: '含节假日加购',
+        creator: '王伟', createdAt: '2025-11-01 10:30:00', modifier: '李四', modifiedAt: '2026-03-15 14:20:00',
+        history: [
+          {
+            time: '2026-03-15 14:20:00', operator: '李四',
+            beforeAmount: 5500000, afterAmount: 6000000,
+            beforeRemark: '基础采购', afterRemark: '含节假日加购',
+            note: '年度采购计划上调，补充节假日食材预算'
+          },
+          {
+            time: '2025-12-10 09:05:00', operator: '张三',
+            beforeAmount: 5200000, afterAmount: 5500000,
+            beforeRemark: '', afterRemark: '基础采购',
+            note: '根据上一年度实际支出情况调整预算'
+          }
+        ]
+      },
+      {
+        id: 3, campus: '中心院区', year: 2025, amount: 5500000, remark: '基础采购',
+        creator: '王伟', createdAt: '2024-11-01 10:30:00', modifier: '张三', modifiedAt: '2025-04-12 09:30:00',
+        history: [
+          {
+            time: '2025-04-12 09:30:00', operator: '张三',
+            beforeAmount: 5200000, afterAmount: 5500000,
+            beforeRemark: '', afterRemark: '基础采购',
+            note: '预算金额上调，纳入基础采购科目'
+          }
+        ]
+      },
+      {
+        id: 2, campus: '中心院区', year: 2024, amount: 5000000, remark: '',
+        creator: '王伟', createdAt: '2023-11-02 09:00:00', modifier: '', modifiedAt: '', history: []
+      },
+      {
+        id: 1, campus: '中心院区', year: 2023, amount: 4500000, remark: '',
+        creator: '王伟', createdAt: '2022-11-03 10:00:00', modifier: '', modifiedAt: '', history: []
+      }
+    ];
+
+    const app = createApp({
+      setup() {
+        // ---------- 权限 ----------
+        const role = ref('admin'); // admin=后勤管理员，storekeeper=库管员
+        const isAdmin = computed(() => role.value === 'admin');
+        const roleLabel = computed(() => role.value === 'admin' ? '后勤管理员' : '库管员');
+        const currentUserName = computed(() => role.value === 'admin' ? '王伟' : '刘芳');
+
+        // ---------- 数据 ----------
+        const budgetList = ref(INITIAL_DATA.map(r => ({
+          ...r,
+          history: r.history.map(h => ({ ...h }))
+        })));
+        let nextId = 100;
+
+        // ---------- 查询 ----------
+        const query = reactive({ campus: '', year: '' });
+        const filteredList = computed(() => {
+          return budgetList.value.filter(r => {
+            if (query.campus && r.campus !== query.campus) return false;
+            if (query.year && r.year !== Number(query.year)) return false;
+            return true;
+          });
+        });
+
+        // ---------- 分页 ----------
+        const currentPage = ref(1);
+        const pageSize = ref(5);
+        const total = computed(() => filteredList.value.length);
+        const pagedList = computed(() => {
+          const start = (currentPage.value - 1) * pageSize.value;
+          return filteredList.value.slice(start, start + pageSize.value);
+        });
+
+        function indexMethod(index) {
+          return (currentPage.value - 1) * pageSize.value + index + 1;
+        }
+
+        function handleSearch() {
+          currentPage.value = 1;
+        }
+        function handleReset() {
+          query.campus = '';
+          query.year = '';
+          currentPage.value = 1;
+        }
+
+        // ---------- 新增/编辑 ----------
+        const dialogVisible = ref(false);
+        const saving = ref(false);
+        const formRef = ref();
+        const form = reactive({ id: null, campus: '', year: '', amount: '', remark: '' });
+
+        const dialogTitle = computed(() => form.id == null ? '新增食堂采购预算' : '编辑食堂采购预算');
+
+        const validateAmount = (rule, value, callback) => {
+          const v = String(value == null ? '' : value).trim();
+          if (!v) return callback(new Error('请输入年度采购预算金额'));
+          if (!/^\d+(\.\d{1,2})?$/.test(v)) return callback(new Error('金额格式不正确，最多保留两位小数'));
+          if (!(Number(v) > 0)) return callback(new Error('金额必须大于0'));
+          callback();
+        };
+
+        const rules = {
+          campus: [{ required: true, message: '请选择院区', trigger: 'change' }],
+          year: [{ required: true, message: '请选择预算年度', trigger: 'change' }],
+          amount: [{ validator: validateAmount, trigger: 'blur' }]
+        };
+
+        function resetForm() {
+          form.id = null;
+          form.campus = '';
+          form.year = '';
+          form.amount = '';
+          form.remark = '';
+        }
+
+        function openAdd() {
+          resetForm();
+          dialogVisible.value = true;
+          nextTick(() => formRef.value && formRef.value.clearValidate());
+        }
+
+        function openEdit(row) {
+          form.id = row.id;
+          form.campus = row.campus;
+          form.year = row.year;
+          form.amount = String(row.amount);
+          form.remark = row.remark || '';
+          dialogVisible.value = true;
+          nextTick(() => formRef.value && formRef.value.clearValidate());
+        }
+
+        function handleDialogClosed() {
+          resetForm();
+          formRef.value && formRef.value.clearValidate();
+        }
+
+        function formatNow() {
+          const d = new Date();
+          const p = n => String(n).padStart(2, '0');
+          return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+            ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        }
+
+        function fmtAmount(v) {
+          return Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function handleSave() {
+          formRef.value.validate((valid) => {
+            if (!valid) return;
+
+            const y = Number(form.year);
+            const dup = budgetList.value.find(r => r.campus === form.campus && r.year === y && r.id !== form.id);
+            if (dup) {
+              ElMessage.error('同一院区 + 同一年度只能保存一条预算记录，请勿重复保存');
+              return;
+            }
+
+            saving.value = true;
+            setTimeout(() => {
+              const now = formatNow();
+              if (form.id == null) {
+                // 新增
+                budgetList.value.unshift({
+                  id: nextId++,
+                  campus: form.campus,
+                  year: y,
+                  amount: Number(form.amount),
+                  remark: form.remark || '',
+                  creator: currentUserName.value,
+                  createdAt: now,
+                  modifier: '',
+                  modifiedAt: '',
+                  history: []
+                });
+                ElMessage.success('新增预算成功');
+              } else {
+                // 编辑
+                const target = budgetList.value.find(r => r.id === form.id);
+                if (target) {
+                  const oldAmount = target.amount;
+                  const oldRemark = target.remark || '';
+                  const newAmount = Number(form.amount);
+                  const newRemark = form.remark || '';
+
+                  const changes = [];
+                  if (oldAmount !== newAmount) changes.push('预算金额由 ' + fmtAmount(oldAmount) + ' 调整为 ' + fmtAmount(newAmount));
+                  if (oldRemark !== newRemark) changes.push('备注由「' + (oldRemark || '空') + '」调整为「' + (newRemark || '空') + '」');
+
+                  target.campus = form.campus;
+                  target.year = y;
+                  target.amount = newAmount;
+                  target.remark = newRemark;
+                  target.modifier = currentUserName.value;
+                  target.modifiedAt = now;
+                  target.history.unshift({
+                    time: now,
+                    operator: currentUserName.value,
+                    beforeAmount: oldAmount,
+                    afterAmount: newAmount,
+                    beforeRemark: oldRemark,
+                    afterRemark: newRemark,
+                    note: changes.length ? changes.join('；') : '无实质变更'
+                  });
+                  ElMessage.success('编辑保存成功');
+                }
+              }
+              saving.value = false;
+              dialogVisible.value = false;
+            }, 300);
+          });
+        }
+
+        // ---------- 变更记录 ----------
+        const historyVisible = ref(false);
+        const historyCurrent = ref(null);
+
+        function openHistory(row) {
+          historyCurrent.value = row;
+          historyVisible.value = true;
+        }
+
+        return {
+          role, isAdmin, roleLabel, currentUserName,
+          query, yearOptions: YEAR_OPTIONS,
+          filteredList, currentPage, pageSize, total, pagedList, indexMethod,
+          handleSearch, handleReset,
+          dialogVisible, saving, formRef, form, dialogTitle, rules,
+          openAdd, openEdit, handleDialogClosed, handleSave, fmtAmount,
+          historyVisible, historyCurrent, openHistory
+        };
+      }
+    });
+    for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+      app.component(key, component);
+    }
+    app.use(ElementPlus, { locale: ElementPlusLocaleZhCn });
+    app.mount('#app');
+  </script>
+</body>
+</html>
